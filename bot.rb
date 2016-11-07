@@ -1,9 +1,10 @@
 #!/usr/bin/env ruby
 require 'yaml'
 require 'twitter'
-require 'FileUtils'
+require 'fileutils'
 require "open-uri"
 require 'dropbox_sdk'
+require 'tempfile'
 
 ## Version
 version = 'v0.0.1'
@@ -57,24 +58,23 @@ loop do
 
       ## Download image from Dropbox API
       img_contents = dbClient.get_file("#{img_url}", rev = nil)
-      img_download = open("#{conf['image_directory']}#{img_name}", 'wb+') do |f|
-        f.puts img_contents
-        f.close
-      end
+      temp_img = Tempfile.new("tempfile")
+      temp_img.write img_contents
+      temp_img.close
       puts "\033[32;1m[#{Time.new}] [Download] '#{img_name}'\033[0m"
 
       ## Tweet the image along with the source
-      image = File.new "#{conf['image_directory']}#{img_name}"
+      image = File.new temp_img
       media = twClient.upload image
       twClient.update "http://www.pixiv.net/member_illust.php?mode=medium&illust_id=#{pixiv_id} #Pixiv #艦これ #Kancolle", media_ids: media
       image.close
+      temp_img.unlink
       puts "\033[32;1m[#{Time.new}] [Post] '#{img_name}'\033[0m"
 
 
 
       # Move images to posted direcory
       dbClient.file_move("#{img_url}", "#{conf['db_image_directory']}/posted/#{img_name}")
-      FileUtils.mv "#{conf['image_directory']}#{img_name}", "#{conf['image_directory']}posted/#{img_name}"
       puts "\033[32;1m[#{Time.new}] [Move] '#{img_name}' > 'posted'\033[0m"
 
       # Sleep every loop
@@ -84,8 +84,9 @@ loop do
     # Error handling
     rescue Exception => e
         puts "\033[31;1m[#{Time.new}] #{e.message}\033[0m"
-        FileUtils.mv "#{conf['image_directory']}#{img_name}", "#{conf['image_directory']}error/#{img_name}"
+        dbClient.file_move("#{img_url}", "#{conf['db_image_directory']}/error/#{img_name}")
         puts "\033[31;1m[#{Time.new}] [Move] '#{img_name}' > 'error'\033[0m"
+        next
     end
 
 
@@ -103,7 +104,6 @@ Dir.foreach((conf['image_directory']).to_s) do |item|
     begin
           post_img = item.to_s
           next if (item == '.') || (item == '..' || (item == 'posted') || (item == 'error'))
-
           if File.file? File.expand_path("../#{conf['image_directory']}#{item}", __FILE__)
               image = File.new "#{conf['image_directory']}#{item}"
               #media = twClient.upload image
@@ -114,9 +114,7 @@ Dir.foreach((conf['image_directory']).to_s) do |item|
           else
               puts "\033[31;1m[#{Time.new}] No image '#{item}' found!\033[0m"
           end
-
           sleep conf['sleep_time'].to_i * 60
-
       rescue Exception => e
           puts "\033[31;1m[#{Time.new}] #{e.message}\033[0m"
           puts "\033[31;1m[#{Time.new}] Error, moving '#{item}' to 'error'...\033[0m"
