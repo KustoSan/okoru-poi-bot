@@ -47,8 +47,8 @@ PLATFORMS
   x86-mingw32
 
 DEPENDENCIES
-  dropbox-sdk!
-  twitter!
+  dropbox-sdk
+  twitter
 
 BUNDLED WITH
    1.13.6
